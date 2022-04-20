@@ -132,7 +132,7 @@ with events_this_run AS (
     a.dvce_sent_tstamp,
     a.refr_domain_userid,
     a.refr_dvce_tstamp,
-    coalesce(a.domain_sessionid, a.round_id) as domain_sessionid, -- Attest added coalesce to take into account round_id for Taker
+    coalesce(a.domain_sessionid, r.id) as domain_sessionid, -- Attest added coalesce to take into account round_id for Taker
     a.derived_tstamp,
     a.event_vendor,
     a.event_name,
@@ -143,8 +143,11 @@ with events_this_run AS (
     dense_rank() over (partition by a.event_id order by a.collector_tstamp) as event_id_dedupe_index --dense_rank to catch dupe events with dupe tstamps later
 
   from {{ var('snowplow__events') }} as a
+  left join snowplow_atomic.com_askattest_round_1 r
+    on a.event_id = r.root_id and
+    a.collector_tstamp = r.root_tstamp
   inner join {{ ref('snowplow_web_base_sessions_this_run') }} as b
-  on coalesce(a.domain_sessionid, a.round_id) = b.session_id -- Attest added coalesce to take into account round_id for Taker
+  on coalesce(a.domain_sessionid, r.id) = b.session_id -- Attest added coalesce to take into account round_id for Taker
 
   where a.collector_tstamp <= {{ snowplow_utils.timestamp_add('day', var("snowplow__max_session_days", 3), 'b.start_tstamp') }}
   and a.dvce_sent_tstamp <= {{ snowplow_utils.timestamp_add('day', var("snowplow__days_late_allowed", 3), 'a.dvce_created_tstamp') }}
